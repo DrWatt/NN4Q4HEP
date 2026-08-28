@@ -9,6 +9,7 @@ from pennylane.typing import PostprocessingFn
 from pennylane.workflow import construct_tape
 
 from pennylane import GradientDescentOptimizer
+import tensorflow as tf
 
 
 @transform
@@ -45,9 +46,11 @@ def append_gate(tape: QuantumScript, params, gates) -> tuple[QuantumScriptBatch,
 
 
 class VariationalAdaptiveOptimizer:
-    def __init__(self, param_steps=10, stepsize=0.5):
+    def __init__(self, param_steps=20, stepsize=0.5, learning_rate = 1e-2):
         self.param_steps = param_steps
         self.stepsize = stepsize
+        self.learning_rate = learning_rate
+        #self.opt = tf.keras.optimizers.Adam(learning_rate = learning_rate)
 
     @staticmethod
     def _circuit(params, gates, initial_circuit, circuit_args):
@@ -82,7 +85,7 @@ class VariationalAdaptiveOptimizer:
 
 
 
-    def step_and_cost(self, circuit, operator_pool, drain_pool=False, params_zero=True, circuit_args = None):
+    def step_and_cost(self, circuit, operator_pool, drain_pool=False, params_zero=True, circuit_args = None, circuit_target = None):
         r"""Update the circuit with one step of the optimizer, return the corresponding
         objective function value prior to the step, and return the maximum gradient
 
@@ -96,12 +99,10 @@ class VariationalAdaptiveOptimizer:
             tuple[.QNode, float, float]: the optimized circuit, the objective function output prior
             to the step, and the largest gradient
         """
-        if True:
-            cost = circuit(circuit_args)
-        else:
-            cost = circuit()
+        #cost = circuit(circuit_args)
+
         qnode = copy.copy(circuit)
-        tape = construct_tape(qnode)(circuit_args)
+        pl_tape = construct_tape(qnode)(circuit_args)
 
         if drain_pool:
             operator_pool = [
@@ -109,30 +110,46 @@ class VariationalAdaptiveOptimizer:
                 for gate in operator_pool
                 if all(
                     gate.name != operation.name or gate.wires != operation.wires
-                    for operation in tape.operations
+                    for operation in pl_tape.operations
                 )
             ]
-
-        params = pnp.array([gate.parameters[0] for gate in operator_pool], requires_grad=True)
-        circuit_args_np = pnp.array(circuit_args, requires_grad = False)
+        weights = tf.Variable([gate.parameters[0] for gate in operator_pool], trainable=True, dtype = tf.float64)
+        #params = pnp.array([gate.parameters[0] for gate in operator_pool], requires_grad=True)
+        #circuit_args_np = pnp.array(circuit_args, requires_grad = False)
         qnode.func = self._circuit
-        grads = grad(qnode)(params, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args_np)
+        with tf.GradientTape() as tape:
+            pred = qnode(weights, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args)
+            loss = tf.reduce_mean(tf.math.square(circuit_target - pred))  ## TODO: insert general loss function here instead of manual rms
 
-        selected_gates = [operator_pool[pnp.argmax(abs(grads))]]
-        optimizer = GradientDescentOptimizer(stepsize=self.stepsize)
+        
+        
+        grads = tape.gradient(loss, weights)
+        #grads = grad(qnode)(params, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args_np)
 
-        if params_zero:
-            params = pnp.zeros(len(selected_gates))
-        else:
-            params = pnp.array([gate.parameters[0] for gate in selected_gates], requires_grad=True)
+        selected_gates = [operator_pool[tf.argmax(tf.abs(grads))]]
+        print(selected_gates)
+        #optimizer = GradientDescentOptimizer(stepsize=self.stepsize)
+
+        #if params_zero:
+        #    params = pnp.zeros(len(selected_gates))
+        #else:
+        sel_weights = tf.Variable([gate.parameters[0] for gate in selected_gates], trainable = True, dtype = tf.float64)
+        print(sel_weights)
+        opt = tf.keras.optimizers.Adam(learning_rate = self.learning_rate) #TODO: Make optimizer a generic function to get from constructor 
 
         for _ in range(self.param_steps):
-            params, _ = optimizer.step_and_cost(
-                qnode, params, gates=selected_gates, initial_circuit=circuit.func, circuit_args = circuit_args_np
-            )
+            with tf.GradientTape() as tape:
+                pred = qnode(sel_weights, gates = selected_gates, initial_circuit=circuit.func, circuit_args = circuit_args)
+                loss = tf.reduce_mean(tf.math.square(circuit_target - pred))
 
-        qnode.func = append_gate(circuit.func, params, selected_gates)
+            gradients = tape.gradient(loss, sel_weights)
+            opt.apply_gradients([(gradients, sel_weights)])
+            #params, _ = optimizer.step_and_cost(
+            #    qnode, params, gates=selected_gates, initial_circuit=circuit.func, circuit_args = circuit_args_np
+            #)
 
-        return qnode, cost, max(abs(math.toarray(grads)))
+        qnode.func = append_gate(circuit.func, sel_weights, selected_gates)
+
+        return qnode, loss, max(abs(math.toarray(grads)))
 
 
