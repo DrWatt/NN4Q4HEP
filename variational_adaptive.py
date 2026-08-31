@@ -93,7 +93,7 @@ class VariationalAdaptiveOptimizer:
 
 
 
-    def step_and_cost(self, circuit, operator_pool, drain_pool=False, params_zero=True, circuit_args = None, circuit_target = None):
+    def train_step(self, circuit, operator_pool, drain_pool=False, params_zero=True, circuit_args = None, circuit_target = None):
         r"""Update the circuit with one step of the optimizer, return the corresponding
         objective function value prior to the step, and return the maximum gradient
 
@@ -107,7 +107,6 @@ class VariationalAdaptiveOptimizer:
             tuple[.QNode, float, float]: the optimized circuit, the objective function output prior
             to the step, and the largest gradient
         """
-        #cost = circuit(circuit_args)
 
         qnode = copy.copy(circuit)
         pl_tape, _ = construct_batch(qnode)(circuit_args)
@@ -123,8 +122,6 @@ class VariationalAdaptiveOptimizer:
             ]
         #weights = tf.Variable(tf.zeros(len(operator_pool), dtype = tf.float64))
         weights = tf.Variable([gate.parameters[0] for gate in operator_pool], trainable=True, dtype = tf.float64)
-        #params = pnp.array([gate.parameters[0] for gate in operator_pool], requires_grad=True)
-        #circuit_args_np = pnp.array(circuit_args, requires_grad = False)
         qnode.func = self._circuit
         with tf.GradientTape() as tape:
             pred = qnode(weights, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args)
@@ -133,11 +130,9 @@ class VariationalAdaptiveOptimizer:
         
         
         grads = tape.gradient(loss, weights)
-        #grads = grad(qnode)(params, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args_np)
 
         selected_gates = [operator_pool[tf.argmax(tf.abs(grads))]]
         print("Selected gates: ", selected_gates)
-        #optimizer = GradientDescentOptimizer(stepsize=self.stepsize)
 
         if params_zero:
             sel_weights = tf.Variable(tf.zeros(len(selected_gates), dtype = tf.float64))
@@ -153,9 +148,7 @@ class VariationalAdaptiveOptimizer:
 
             gradients = tape.gradient(loss, sel_weights)
             opt.apply_gradients([(gradients, sel_weights)])
-            #params, _ = optimizer.step_and_cost(
-            #    qnode, params, gates=selected_gates, initial_circuit=circuit.func, circuit_args = circuit_args_np
-            #)
+
 
         qnode.func = append_gate(circuit.func, sel_weights, selected_gates)
 
@@ -163,7 +156,7 @@ class VariationalAdaptiveOptimizer:
 
     def fit(self, circuit, operator_pool, drain_pool, circuit_args, circuit_target):
         for i in range(len(operator_pool)):
-            circuit, energy, gradient = self.step_and_cost(circuit, operator_pool, drain_pool=True, circuit_args = circuit_args, circuit_target = circuit_target)
+            circuit, energy, gradient = self.train_step(circuit, operator_pool, drain_pool=True, circuit_args = circuit_args, circuit_target = circuit_target)
             if i % 2 == 0:
                 print("n = {:},  E = {:.8f} H, Largest Gradient = {:.3f}".format(i, energy, gradient))
                 print(draw(circuit, decimals=None)(circuit_args[:1]))
