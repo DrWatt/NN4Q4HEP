@@ -54,6 +54,8 @@ class VariationalAdaptiveOptimizer:
         if loss is None:
             print("Missing Loss function. Using RMSE...")
             self.loss = tf.keras.losses.MeanSquaredError()
+        else:
+            self.loss = loss
         self._opt_config = tf.keras.optimizers.serialize(optimizer)
 
 
