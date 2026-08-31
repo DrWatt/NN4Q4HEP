@@ -46,11 +46,15 @@ def append_gate(tape: QuantumScript, params, gates) -> tuple[QuantumScriptBatch,
 
 
 class VariationalAdaptiveOptimizer:
-    def __init__(self, param_steps=20, stepsize=0.5, learning_rate = 1e-2):
+    def __init__(self, param_steps=20, optimizer= None):
         self.param_steps = param_steps
-        self.stepsize = stepsize
-        self.learning_rate = learning_rate
-        #self.opt = tf.keras.optimizers.Adam(learning_rate = learning_rate)
+        if optimizer is None:
+            raise ValueError("Missing training optimizer")
+        self._opt_config = tf.keras.optimizers.serialize(optimizer)
+
+
+    def _create_optimizer(self):
+        return tf.keras.optimizers.deserialize(self._opt_config)
 
     @staticmethod
     def _circuit(params, gates, initial_circuit, circuit_args):
@@ -135,7 +139,7 @@ class VariationalAdaptiveOptimizer:
         #else:
         sel_weights = tf.Variable([gate.parameters[0] for gate in selected_gates], trainable = True, dtype = tf.float64)
         print(sel_weights)
-        opt = tf.keras.optimizers.Adam(learning_rate = self.learning_rate) #TODO: Make optimizer a generic function to get from constructor 
+        opt = self._create_optimizer()
 
         for _ in range(self.param_steps):
             with tf.GradientTape() as tape:

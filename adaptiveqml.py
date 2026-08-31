@@ -68,19 +68,22 @@ if __name__ == "__main__":
     trainset = dataframe.as_tensorflow()
     for X,Y in trainset:
         A = tf.cast(X, tf.float64)[0]
+        B = tf.cast(Y, tf.float64)[0]
         break
     print(f"The training set contains {dataframe.num_batches} batches of data")
     dummy = tf.Variable(tf.random.uniform(shape=(1,9,),minval=-0.1,maxval=0.1,dtype=tf.float64))
     print(pl.draw(circuit, decimals=None)(dummy))
-    opt = variational_adaptive.VariationalAdaptiveOptimizer()
+    opt = variational_adaptive.VariationalAdaptiveOptimizer(optimizer = tf.keras.optimizers.Adam(learning_rate = 1e-2))
     
     #weights = tf.Variable(tf.random.uniform(shape, minval=-np.pi/2, maxval=np.pi/2, dtype=tf.float64), trainable=True)
     #train_epoch(trainset, circuit, opt)
     for i in range(len(operator_pool)):
-        circuit, energy, gradient = opt.step_and_cost(circuit, operator_pool, drain_pool=True, circuit_args = A)
+        circuit, energy, gradient = opt.step_and_cost(circuit, operator_pool, drain_pool=True, circuit_args = A, circuit_target = B)
         if i % 2 == 0:
             print("n = {:},  E = {:.8f} H, Largest Gradient = {:.3f}".format(i, energy, gradient))
             print(pl.draw(circuit, decimals=None)(dummy))
             print()
-        if gradient < 3e-3:
+        #if i > 5:
+        #    break
+        if energy < 1e-1:
             break
