@@ -33,7 +33,7 @@ combinations = [(wires[i],wires[j]) for i in wires for j in wires if i!=j]
 operator_pool = [pl.prod(pl.CNOT(wires=list(comb)),pl.RX(0.1, wires=comb[0])) for comb in combinations]
 
 
-#@pl.batch_input(argnum=0)
+@pl.batch_input(argnum=0)
 @pl.qnode(dev, interface = 'tf')
 def circuit(dl):
     pl.AngleEmbedding(dl, wires = dev.wires, rotation ="Y")
@@ -67,8 +67,8 @@ if __name__ == "__main__":
 
     trainset = dataframe.as_tensorflow()
     for X,Y in trainset:
-        A = tf.cast(X, tf.float64)[0]
-        B = tf.cast(Y, tf.float64)[0]
+        A = tf.cast(X, tf.float64)[:5]
+        B = tf.cast(Y, tf.float64)[:5]
         break
     print(f"The training set contains {dataframe.num_batches} batches of data")
     dummy = tf.Variable(tf.random.uniform(shape=(1,9,),minval=-0.1,maxval=0.1,dtype=tf.float64))

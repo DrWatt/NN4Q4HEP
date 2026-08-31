@@ -6,7 +6,7 @@ from pennylane._grad import grad
 from pennylane.tape import QuantumScript, QuantumScriptBatch
 from pennylane.transforms.core import transform
 from pennylane.typing import PostprocessingFn
-from pennylane.workflow import construct_tape
+from pennylane.workflow import construct_batch
 
 from pennylane import GradientDescentOptimizer
 import tensorflow as tf
@@ -46,10 +46,13 @@ def append_gate(tape: QuantumScript, params, gates) -> tuple[QuantumScriptBatch,
 
 
 class VariationalAdaptiveOptimizer:
-    def __init__(self, param_steps=20, optimizer= None):
+    def __init__(self, param_steps=20, optimizer = None, loss = None):
         self.param_steps = param_steps
         if optimizer is None:
             raise ValueError("Missing training optimizer")
+        if loss is None:
+            print("Missing Loss function. Using RMSE...")
+            self.loss = tf.keras.losses.MeanSquaredError()
         self._opt_config = tf.keras.optimizers.serialize(optimizer)
 
 
@@ -106,7 +109,7 @@ class VariationalAdaptiveOptimizer:
         #cost = circuit(circuit_args)
 
         qnode = copy.copy(circuit)
-        pl_tape = construct_tape(qnode)(circuit_args)
+        pl_tape, _ = construct_batch(qnode)(circuit_args)
 
         if drain_pool:
             operator_pool = [
@@ -114,7 +117,7 @@ class VariationalAdaptiveOptimizer:
                 for gate in operator_pool
                 if all(
                     gate.name != operation.name or gate.wires != operation.wires
-                    for operation in pl_tape.operations
+                    for operation in pl_tape[0].operations
                 )
             ]
         weights = tf.Variable([gate.parameters[0] for gate in operator_pool], trainable=True, dtype = tf.float64)
@@ -144,7 +147,7 @@ class VariationalAdaptiveOptimizer:
         for _ in range(self.param_steps):
             with tf.GradientTape() as tape:
                 pred = qnode(sel_weights, gates = selected_gates, initial_circuit=circuit.func, circuit_args = circuit_args)
-                loss = tf.reduce_mean(tf.math.square(circuit_target - pred))
+                loss = self.loss(circuit_target,pred)
 
             gradients = tape.gradient(loss, sel_weights)
             opt.apply_gradients([(gradients, sel_weights)])
