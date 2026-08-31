@@ -29,9 +29,27 @@ void filteroots(std::string homepath) {
   
   ROOT::RDataFrame fchain("Events", rootFiles);
 
-    auto newfchain =  fchain.Define("GoodFatJet_mask", "(FatJet_muonIdx3SJ >= 0) || (FatJet_electronIdx3SJ >= 0)").Define("MuonJet_eta",take_lepton,{"Muon_eta","FatJet_muonIdx3SJ"}).Define("MuonJet_phi",take_lepton,{"Muon_phi","FatJet_muonIdx3SJ"}).Define("MuonJet_pt",take_lepton,{"Muon_pt","FatJet_muonIdx3SJ"}).Define("ElecJet_eta",take_lepton,{"Electron_eta","FatJet_electronIdx3SJ"}).Define("ElecJet_phi",take_lepton,{"Electron_phi","FatJet_electronIdx3SJ"}).Define("ElecJet_pt",take_lepton,{"Electron_pt","FatJet_electronIdx3SJ"}).Define("GoodFatJet_pt",  "FatJet_pt[GoodFatJet_mask]").Define("GoodFatJet_eta", "FatJet_eta[GoodFatJet_mask]").Define("GoodFatJet_phi", "FatJet_phi[GoodFatJet_mask]").Define("GoodFatJet_btagCSVV2", "FatJet_btagCSVV2[GoodFatJet_mask]").Define("GoodFatJet_btagDeepB", "FatJet_btagDeepB[GoodFatJet_mask]").Define("GoodFatJet_btagHbb", "FatJet_btagHbb[GoodFatJet_mask]");
+    auto newfchain =  fchain.Define(
+                                    "GoodFatJet_mask", "(FatJet_muonIdx3SJ >= 0) && (FatJet_electronIdx3SJ >= 0)")
+                            .Filter("ROOT::VecOps::Any(GoodFatJet_mask)","Require at least one valid fat jet")
+                            .Define("GoodMuonIdx", "FatJet_muonIdx3SJ[GoodFatJet_mask]")
+                            .Define("GoodElectronIdx", "FatJet_electronIdx3SJ[GoodFatJet_mask]")
+                            .Define("MuonJet_eta",take_lepton,{"Muon_eta","GoodMuonIdx"})
+                            .Define("MuonJet_phi",take_lepton,{"Muon_phi","GoodMuonIdx"})
+                            .Define("MuonJet_pt",take_lepton,{"Muon_pt","GoodMuonIdx"})
+                            .Define("ElecJet_eta",take_lepton,{"Electron_eta","GoodElectronIdx"})
+                            .Define("ElecJet_phi",take_lepton,{"Electron_phi","GoodElectronIdx"})
+                            .Define("ElecJet_pt",take_lepton,{"Electron_pt","GoodElectronIdx"})
+                            .Define("GoodFatJet_pt",  "FatJet_pt[GoodFatJet_mask]")
+                            .Define("GoodFatJet_eta", "FatJet_eta[GoodFatJet_mask]")
+                            .Define("GoodFatJet_phi", "FatJet_phi[GoodFatJet_mask]")
+                            .Define("GoodFatJet_btagCSVV2", "FatJet_btagCSVV2[GoodFatJet_mask]")
+                            .Define("GoodFatJet_btagDeepB", "FatJet_btagDeepB[GoodFatJet_mask]")
+                            .Define("GoodFatJet_btagHbb", "FatJet_btagHbb[GoodFatJet_mask]");
+
+
 //  "Muon_eta[FatJet_muonIdx3SJ]"
-  newfchain.Snapshot("Events","reduced_w_tags.root",{"MuonJet_eta","MuonJet_phi","MuonJet_pt","ElecJet_eta","ElecJet_phi","ElecJet_pt","GoodFatJet_phi","GoodFatJet_eta","GoodFatJet_pt","GoodFatJet_btagCSVV2","GoodFatJet_btagDeepB","GoodFatJet_btagHbb"});
+  newfchain.Snapshot("Events","reduced_w_tags_2.root",{"MuonJet_eta","MuonJet_phi","MuonJet_pt","ElecJet_eta","ElecJet_phi","ElecJet_pt","GoodFatJet_phi","GoodFatJet_eta","GoodFatJet_pt","GoodFatJet_btagCSVV2","GoodFatJet_btagDeepB","GoodFatJet_btagHbb"});
   //fchain.Snapshot("Events","reduced.root",{"FatJet_phi","FatJet_eta","FatJet_pt","Jet_nMuons",}); 
 }
 
