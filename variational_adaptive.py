@@ -126,7 +126,7 @@ class VariationalAdaptiveOptimizer:
         qnode.func = self._circuit
         with tf.GradientTape() as tape:
             pred = qnode(weights, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args)
-            loss = tf.reduce_mean(tf.math.square(circuit_target - pred))  ## TODO: insert general loss function here instead of manual rms
+            loss = self.loss(circuit_target, pred)
 
         
         
