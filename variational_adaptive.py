@@ -9,6 +9,7 @@ from pennylane.typing import PostprocessingFn
 from pennylane.workflow import construct_batch
 
 from pennylane import GradientDescentOptimizer
+from pennylane import draw
 import tensorflow as tf
 
 
@@ -120,6 +121,7 @@ class VariationalAdaptiveOptimizer:
                     for operation in pl_tape[0].operations
                 )
             ]
+        #weights = tf.Variable(tf.zeros(len(operator_pool), dtype = tf.float64))
         weights = tf.Variable([gate.parameters[0] for gate in operator_pool], trainable=True, dtype = tf.float64)
         #params = pnp.array([gate.parameters[0] for gate in operator_pool], requires_grad=True)
         #circuit_args_np = pnp.array(circuit_args, requires_grad = False)
@@ -134,13 +136,13 @@ class VariationalAdaptiveOptimizer:
         #grads = grad(qnode)(params, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args_np)
 
         selected_gates = [operator_pool[tf.argmax(tf.abs(grads))]]
-        print(selected_gates)
+        print("Selected gates: ", selected_gates)
         #optimizer = GradientDescentOptimizer(stepsize=self.stepsize)
 
-        #if params_zero:
-        #    params = pnp.zeros(len(selected_gates))
-        #else:
-        sel_weights = tf.Variable([gate.parameters[0] for gate in selected_gates], trainable = True, dtype = tf.float64)
+        if params_zero:
+            sel_weights = tf.Variable(tf.zeros(len(selected_gates), dtype = tf.float64))
+        else:
+            sel_weights = tf.Variable([gate.parameters[0] for gate in selected_gates], trainable = True, dtype = tf.float64)
         print(sel_weights)
         opt = self._create_optimizer()
 
@@ -159,4 +161,14 @@ class VariationalAdaptiveOptimizer:
 
         return qnode, loss, max(abs(math.toarray(grads)))
 
-
+    def fit(self, circuit, operator_pool, drain_pool, circuit_args, circuit_target):
+        for i in range(len(operator_pool)):
+            circuit, energy, gradient = self.step_and_cost(circuit, operator_pool, drain_pool=True, circuit_args = circuit_args, circuit_target = circuit_target)
+            if i % 2 == 0:
+                print("n = {:},  E = {:.8f} H, Largest Gradient = {:.3f}".format(i, energy, gradient))
+                print(draw(circuit, decimals=None)(circuit_args[:1]))
+                print()
+            #if i > 5:
+            #    break
+            if energy < 1e-1:
+                break
