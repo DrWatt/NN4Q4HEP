@@ -1,14 +1,11 @@
 import copy
 
 from pennylane import math
-from pennylane import numpy as pnp
-from pennylane._grad import grad
 from pennylane.tape import QuantumScript, QuantumScriptBatch
 from pennylane.transforms.core import transform
 from pennylane.typing import PostprocessingFn
 from pennylane.workflow import construct_batch
 
-from pennylane import GradientDescentOptimizer
 from pennylane import draw
 import tensorflow as tf
 
@@ -52,18 +49,19 @@ class VariationalAdaptiveOptimizer:
         if optimizer is None:
             raise ValueError("Missing training optimizer")
         if loss is None:
-            print("Missing Loss function. Using RMSE...")
+            print("Missing Loss function. Using MSE...")
             self.loss = tf.keras.losses.MeanSquaredError()
         else:
             self.loss = loss
         self._opt_config = tf.keras.optimizers.serialize(optimizer)
+        self._cumulative_weights = []
 
 
     def _create_optimizer(self):
         return tf.keras.optimizers.deserialize(self._opt_config)
 
     @staticmethod
-    def _circuit(params, gates, initial_circuit, circuit_args):
+    def _circuit(circuit_args, gates,params, initial_circuit):
         """Append parametrized gates to an existing circuit.
 
         Args:
@@ -126,7 +124,7 @@ class VariationalAdaptiveOptimizer:
         weights = tf.Variable([gate.parameters[0] for gate in operator_pool], trainable=True, dtype = tf.float64)
         qnode.func = self._circuit
         with tf.GradientTape() as tape:
-            pred = qnode(weights, gates=operator_pool, initial_circuit=circuit.func, circuit_args = circuit_args)
+            pred = qnode(circuit_args = circuit_args, params = weights, gates=operator_pool, initial_circuit=circuit.func )
             loss = self.loss(circuit_target, pred)
 
         
@@ -141,15 +139,18 @@ class VariationalAdaptiveOptimizer:
         else:
             sel_weights = tf.Variable([gate.parameters[0] for gate in selected_gates], trainable = True, dtype = tf.float64)
         print(sel_weights)
+
+
+        self._cumulative_weights.append(sel_weights)
         opt = self._create_optimizer()
 
         for _ in range(self.param_steps):
             with tf.GradientTape() as tape:
-                pred = qnode(sel_weights, gates = selected_gates, initial_circuit=circuit.func, circuit_args = circuit_args)
+                pred = qnode(circuit_args = circuit_args, params=sel_weights, gates = selected_gates, initial_circuit=circuit.func )
                 loss = self.loss(circuit_target,pred)
 
-            gradients = tape.gradient(loss, sel_weights)
-            opt.apply_gradients([(gradients, sel_weights)])
+            gradients = tape.gradient(loss, self._cumulative_weights)
+            opt.apply_gradients(zip(gradients, self._cumulative_weights))
 
 
         qnode.func = append_gate(circuit.func, sel_weights, selected_gates)
