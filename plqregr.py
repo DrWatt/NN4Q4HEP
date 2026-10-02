@@ -5,13 +5,14 @@ import tensorflow as tf
 import pennylane as pl
     
 os.environ["KERAS_BACKEND"] = "tensorflow"
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 
 tf.get_logger().setLevel("ERROR")
 
 def tree_loader(path: str):
     df = ROOT.RDataFrame("Events", path)
     
-    dl = ROOT.Experimental.ML.RDataLoader(df, 128, 128, columns = ['MuonJet_eta', 'MuonJet_phi', 'MuonJet_pt', 'ElecJet_eta', 'ElecJet_phi', 'ElecJet_pt', 'GoodFatJet_phi', 'GoodFatJet_eta','GoodFatJet_pt'], target = ["GoodFatJet_btagCSVV2"], shuffle = True, drop_remainder = True,max_vec_sizes={'MuonJet_eta':1, 'MuonJet_phi':1, 'MuonJet_pt':1, 'ElecJet_eta':1, 'ElecJet_phi':1, 'ElecJet_pt':1, 'GoodFatJet_phi':1, 'GoodFatJet_eta':1,'GoodFatJet_pt':1,"GoodFatJet_btagCSVV2":1})
+    dl = ROOT.Experimental.ML.RDataLoader(df, 64, 128, columns = ['MuonJet_eta', 'MuonJet_phi', 'MuonJet_pt', 'ElecJet_eta', 'ElecJet_phi', 'ElecJet_pt', 'GoodFatJet_phi', 'GoodFatJet_eta','GoodFatJet_pt'], target = ["GoodFatJet_btagCSVV2"], shuffle = True, drop_remainder = True,max_vec_sizes={'MuonJet_eta':1, 'MuonJet_phi':1, 'MuonJet_pt':1, 'ElecJet_eta':1, 'ElecJet_phi':1, 'ElecJet_pt':1, 'GoodFatJet_phi':1, 'GoodFatJet_eta':1,'GoodFatJet_pt':1,"GoodFatJet_btagCSVV2":1})
     
     inp_col = dl.feature_columns
     num_features = len(inp_col)
@@ -58,12 +59,12 @@ def train_epoch(trainset, weights, circuit, opt):
 
 
 if __name__ == "__main__":
-    dataframe = tree_loader("reduced_w_tags.root")
+    dataframe = tree_loader("reduced_w_tags_and.root")
 
     trainset = dataframe.as_tensorflow()
 
     print(f"The training set contains {dataframe.num_batches} batches of data")
     
-    opt = tf.keras.optimizers.Adam(learning_rate = 1e-1)
+    opt = tf.keras.optimizers.Adam(learning_rate = 1e-2)
     weights = tf.Variable(tf.random.uniform(shape, minval=-np.pi/2, maxval=np.pi/2, dtype=tf.float64), trainable=True)
     train_epoch(trainset, weights, circuit, opt)

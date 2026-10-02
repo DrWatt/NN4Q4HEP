@@ -46,11 +46,44 @@ void filteroots(std::string homepath) {
                             .Define("GoodFatJet_btagCSVV2", "FatJet_btagCSVV2[GoodFatJet_mask]")
                             .Define("GoodFatJet_btagDeepB", "FatJet_btagDeepB[GoodFatJet_mask]")
                             .Define("GoodFatJet_btagHbb", "FatJet_btagHbb[GoodFatJet_mask]");
+//                            .Define("Good_SV_charge", "SV_charge")
+//                            .Define("Good_SV_dlen", "SV_dlen")
+//                            .Define("Good_SV_dxy", "SV_dxy[GoodFatJet_mask]")
+//                            .Define("Good_SV_eta", "SV_eta[GoodFatJet_mask]")
+//                            .Define("Good_SV_phi", "SV_phi[GoodFatJet_mask]")
+//                            .Define("Good_SV_pt", "SV_pt[GoodFatJet_mask]")
+//                            .Define("Good_SV_x", "SV_x[GoodFatJet_mask]")
+//                            .Define("Good_SV_y", "SV_y[GoodFatJet_mask]")
+//                            .Define("Good_SV_z", "SV_z[GoodFatJet_mask]")
+//                            .Define("Good_SV_pAngle", "SV_pAngle[GoodFatJet_mask]")
+//                            .Define("Good_SV_ntracks", "SV_ntracks[GoodFatJet_mask]");
 
 
 //  "Muon_eta[FatJet_muonIdx3SJ]"
-  newfchain.Snapshot("Events","reduced_w_tags_2.root",{"MuonJet_eta","MuonJet_phi","MuonJet_pt","ElecJet_eta","ElecJet_phi","ElecJet_pt","GoodFatJet_phi","GoodFatJet_eta","GoodFatJet_pt","GoodFatJet_btagCSVV2","GoodFatJet_btagDeepB","GoodFatJet_btagHbb"});
-  //fchain.Snapshot("Events","reduced.root",{"FatJet_phi","FatJet_eta","FatJet_pt","Jet_nMuons",}); 
+  newfchain.Snapshot("Events","dataset_SV_and.root",{"MuonJet_eta",
+                        "MuonJet_phi",
+                        "MuonJet_pt",
+                        "ElecJet_eta",
+                        "ElecJet_phi",
+                        "ElecJet_pt",
+                        "GoodFatJet_phi",
+                        "GoodFatJet_eta",
+                        "GoodFatJet_pt",
+                        "GoodFatJet_btagCSVV2",
+                        "GoodFatJet_btagDeepB",
+                        "GoodFatJet_btagHbb",
+                        "SV_charge", 
+                        "SV_dlen",
+                        "SV_dxy",
+                        "SV_eta",
+                        "SV_phi",
+                        "SV_pt",
+                        "SV_x",
+                        "SV_y",
+                        "SV_z",
+                        "SV_pAngle", 
+                        "SV_ntracks"
+                        });
 }
 
 
