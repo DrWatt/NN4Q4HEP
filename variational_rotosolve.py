@@ -38,42 +38,101 @@ def append_gate(tape: QuantumScript, params, gates) -> tuple[QuantumScriptBatch,
 
 
 class VariationalAdaptiveOptimizer:
-    def __init__(self, algorithm, dev, param_steps=20, num_layers = 10, optimizer = None, loss = None):
+    def __init__(self, algorithm, dev, param_steps=20, num_layers = 10, optimizer = None, loss = None, readout_wire = None, cz_edges = None, new_gate_scale = 0.0, seed = 0):
+        if algorithm.lower() not in ("roto", "rotosolve"):
+            raise ValueError("Only 'roto'/'rotosolve' is implemented")
+        if loss is not None:
+            raise ValueError("This three-point Rotosolve implementation uses a linear-margin loss; MSE and cross-entropy need a different update.")
+        if algorithm.lower() in ("roto", "rotosolve") and optimizer is not None:
+            raise ValueError("No separate optimizer is needed for Rotosolve.")
         self.algorithm = algorithm
         self.dev = dev
+        self.wires = tuple(dev.wires)
+        self.readout_wire = self.wires[:-1] if readout_wire is None else readout_wire
+        if self.readout_wire not in self.wires:
+            raise ValueError("readout_wire must be among the device wires")
+        # A line topology by default; pass hardware edges to override it.
+        self.cz_edges = (
+            tuple(zip(self.wires[:-1], self.wires[1:]))
+            if cz_edges is None
+            else tuple(tuple(edge) for edge in cz_edges)
+        )
+        for edge in self.cz_edges:
+            if len(edge) != 2 or edge[0] == edge[1] or any(w not in self.wires for w in edge):
+                raise ValueError(f"Invalid CZ edge: {edge}")
+        self.new_gate_scale = float(new_gate_scale)
+        self._key = jax.random.PRNGKey(seed)
         self.param_steps = param_steps
         self.num_layers = num_layers
-    #    if optimizer is None:
-    #        raise ValueError("Missing training optimizer")
-        if loss is None:
-            print("Missing Loss function. Using MSE...")
-#            self.loss = tf.keras.losses.MeanSquaredError()
-    #    else:
-    #        self.loss = loss
-        self.circuit = circuit
-
-    @pl.batch_input(argnum=0)
-    @pl.qnode(dev, interface = 'jax')
-    def circuit(dl):
-        pl.AngleEmbedding(dl, wires = dev.wires, rotation ="X")
-        return pl.expval(obs)
+        self.gates = []  # Each item: ('RX'|'RZ'|'CZ', tuple(wires))
+        self.theta = jnp.zeros((0,), dtype = jnp.float64)
+        self.history = []
+        self.circuit = self.build_circuit()
 
     @staticmethod
-    def _circuit(circuit_args, gates,params, initial_circuit):
-        """Append parametrized gates to an existing circuit.
+    def _gate_name(gate):
+        name = gate.upper() of isinstance(gate, str) else gate.__name__.upper()
+        if name not in  ("RX","RZ","CZ"):
+            raise ValueError(f"Non-native or unsupported operation: {name}")
+        return name
 
-        Args:
-            params (array[float]): parameters of the gates to be added
-            gates (list[Operator]): list of the gates to be added
-            initial_circuit (function): user-defined circuit that returns an expectation value
-            circuit_args (list): list of the circuit arguments for QML *****
+    def build_circuit(self):
+        architecture = tuple(self.gates)
+        wires = self.wires
+        readout_wire = self.readout_wire
+        dev = self.dev
 
-        Returns:
-            function: user-defined circuit with appended gates
-        """
-        final_circuit = append_gate(initial_circuit, params, gates)
+        @qml.qnode(dev, interface = "jax", diff_method = None)
+        def circuit(theta, x):
+            for feature_index,wire in enumerate(wires):
+                qml.RX(x[feature_index], wires = wire)
 
-        return final_circuit(circuit_args)
+            parameter_index = 0
+            for gate_name, gate_wires in architecture:
+                if gate_name == "RX":
+                    qml.RX(theta[parameter_index], wires=gate_wires[0])
+                    parameter_index += 1
+                elif gate_name == "RZ":
+                    qml.RZ(theta[parameter_index], wires=gate_wires[0])
+                    parameter_index += 1
+                elif gate_name == "CZ":
+                    qml.CZ(wires=gate_wires)
+            return qml.expval(qml.PauliZ(readout_wire))
+
+        return circuit
+
+    def append_gate(self, gate, target, angle = 0.0):
+        gate = self._gate_name(gate)
+        if gate == "CZ":
+            target = tuple(target)
+
+            if (target not in self.cz_edges and target [::-1] not in self.cz_edges):
+                raise ValueError("Invalid CZ connection")
+        else:
+            if target not in self.wires:
+                raise ValueError("Invalid target wire")
+
+            self.theta = jnp.concatenate([self.theta, jnp.array([angle])])
+        
+        self.gates.append((gate, target))
+
+        self.circuit = self.build_circuit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     @jax.jit
     def loss(theta, X, y):
@@ -139,11 +198,3 @@ class VariationalAdaptiveOptimizer:
                     for w in dev.wires:
                         self.circuit = append_gate(self.circuit, 0.0, operator_pool[i])
                         circuit, energy = self.train_step_roto(circuit, operator_pool, circuit_args = circuit_args, loss = self.loss)
-                        if i % 2 == 0:
-                            print("n = {:},  E = {:.8f} H, Largest Gradient = {:.3f}".format(i, energy, gradient))
-                            print(draw(circuit, decimals=None)(circuit_args[:1]))
-                            print()
-                        #if i > 5:
-                        #    break
-                        if energy < 1e-1:
-                            break
