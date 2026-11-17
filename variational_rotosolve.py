@@ -84,7 +84,7 @@ class VariationalAdaptiveOptimizer:
         readout_wire = self.readout_wire
         dev = self.dev
 
-        @pl.qnode(dev, interface = "jax", diff_method = None)
+        @pl.qnode(dev, interface = "jax",  diff_method="backprop")
         def circuit(theta, x):
             for feature_index,wire in enumerate(wires):
                 pl.RX(x[feature_index], wires = wire)
@@ -169,7 +169,7 @@ class VariationalAdaptiveOptimizer:
     def train_step(self, X, y):
 
         self.theta = self.roto_step(self.circuit, self.theta, X, y)
-        return theta
+        return self.theta
 
 
     def optimize(self, X, y):
@@ -179,6 +179,8 @@ class VariationalAdaptiveOptimizer:
         return (self.theta, float(self.loss(self.circuit, self.theta, X, y)))
 
     def fit(self, operator_pool, X, y, optimize_each_gate = False):
+        X = jnp.asarray(X, dtype=jnp.float64)
+        y = jnp.asarray(y, dtype=jnp.float64)
         if self.algorithm == "roto":
             for layer in range(self.num_layers):
                 for gate in operator_pool:
@@ -201,7 +203,7 @@ class VariationalAdaptiveOptimizer:
                         y
                     )
                 )
-                history.append(current_loss)
+                self.history.append(current_loss)
                 
                 print(
                     f"Layer {layer + 1}/{self.num_layers} | "
@@ -210,4 +212,4 @@ class VariationalAdaptiveOptimizer:
                     f"Loss: {current_loss:.6f}"
                 )
                 
-        return self.circuit, self.theta, history
+        return self.circuit, self.theta, self.history
