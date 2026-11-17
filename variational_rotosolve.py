@@ -8,6 +8,7 @@ from pennylane.typing import PostprocessingFn
 from pennylane.workflow import construct_batch
 
 from pennylane import draw
+import pennylane as pl
 import jax
 import jax.numpy as jnp
 
@@ -72,7 +73,7 @@ class VariationalAdaptiveOptimizer:
 
     @staticmethod
     def _gate_name(gate):
-        name = gate.upper() of isinstance(gate, str) else gate.__name__.upper()
+        name = gate.upper() if isinstance(gate, str) else gate.__name__.upper()
         if name not in  ("RX","RZ","CZ"):
             raise ValueError(f"Non-native or unsupported operation: {name}")
         return name
@@ -83,22 +84,22 @@ class VariationalAdaptiveOptimizer:
         readout_wire = self.readout_wire
         dev = self.dev
 
-        @qml.qnode(dev, interface = "jax", diff_method = None)
+        @pl.qnode(dev, interface = "jax", diff_method = None)
         def circuit(theta, x):
             for feature_index,wire in enumerate(wires):
-                qml.RX(x[feature_index], wires = wire)
+                pl.RX(x[feature_index], wires = wire)
 
             parameter_index = 0
             for gate_name, gate_wires in architecture:
                 if gate_name == "RX":
-                    qml.RX(theta[parameter_index], wires=gate_wires[0])
+                    pl.RX(theta[parameter_index], wires=gate_wires)
                     parameter_index += 1
                 elif gate_name == "RZ":
-                    qml.RZ(theta[parameter_index], wires=gate_wires[0])
+                    pl.RZ(theta[parameter_index], wires=gate_wires)
                     parameter_index += 1
                 elif gate_name == "CZ":
-                    qml.CZ(wires=gate_wires)
-            return qml.expval(qml.PauliZ(readout_wire))
+                    pl.CZ(wires=gate_wires)
+            return pl.expval(pl.PauliZ(readout_wire))
 
         return circuit
 
@@ -178,7 +179,7 @@ class VariationalAdaptiveOptimizer:
         return (self.theta, float(self.loss(self.circuit, self.theta, X, y)))
 
     def fit(self, operator_pool, X, y, optimize_each_gate = False):
-        if self.algorithm = "roto":
+        if self.algorithm == "roto":
             for layer in range(self.num_layers):
                 for gate in operator_pool:
                     name = self._gate_name(gate)
