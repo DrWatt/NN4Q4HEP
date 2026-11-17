@@ -1,4 +1,5 @@
 import copy
+from functools import partial
 
 from pennylane import math
 from pennylane.tape import QuantumScript, QuantumScriptBatch
@@ -120,47 +121,21 @@ class VariationalAdaptiveOptimizer:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    @jax.jit
-    def loss(theta, X, y):
-        preds = jax.vmap(self.circuit, in_axes = (None,0))(theta, X)
+    @staticmethod
+    def loss(circuit, theta, X, y):
+        preds = jax.vmap(circuit, in_axes = (None,0))(theta, X)
         return jnp.mean(1.0 - y * preds)
 
-
-
-
-
-
-    @jax.jit
-    def rotosolve(self, rot, wire, tape):
-        phi = jnp.random.rand() * 2*jnp.pi - jnp.pi
-        h = qp.execute([tape.copy(operations=tape.operations + [rot(phi, wire)])], self.dev)[0]
-        hp = qp.execute([tape.copy(operations=tape.operations + [rot(phi + jnp.pi/2, wire)])], self.dev)[0]
-        hm = qp.execute([tape.copy(operations=tape.operations + [rot(phi - jnp.pi/2, wire)])], self.dev)[0]
-        return phi - jnp.pi/2 - jnp.arctan2(2*h - hp - hm, hp - hm)
-    
-    @jax.jit
-    def train_step_roto(self, circuit, operator_pool, circuit_args = None):
+    @staticmethod
+    @partial(jax.jit, static_argnums=(0,))
+    def roto_step(circuit, theta, X, y):
 
         def update_parameter(i, current_theta):
 
             def evaluate_at(angle):
                 new_theta = current_theta.at[i].set(angle)
 
-                return loss(new_theta, X, y)
+                return VariationalAdaptiveOptimizer.loss(circuit, new_theta, X, y)
         
             L0 = evaluate_at(0.0)
             L90 = evaluate_at(jnp.pi /2)
@@ -189,12 +164,49 @@ class VariationalAdaptiveOptimizer:
         )
         
         return theta
-    
 
-    def fit(self, operator_pool, circuit_args, label):
+    def train_step(self, X, y):
+
+        self.theta = self.roto_step(self.circuit, self.theta, X, y)
+        return theta
+
+
+    def optimize(self, X, y):
+        for _ in range(self.param_steps):
+            self.train_step(X, y)
+
+        return (self.theta, float(self.loss(self.circuit, self.theta, X, y)))
+
+    def fit(self, operator_pool, X, y, optimize_each_gate = False):
         if self.algorithm = "roto":
-            for n in self.num_layers:
-                for i in range(len(operator_pool)):
-                    for w in dev.wires:
-                        self.circuit = append_gate(self.circuit, 0.0, operator_pool[i])
-                        circuit, energy = self.train_step_roto(circuit, operator_pool, circuit_args = circuit_args, loss = self.loss)
+            for layer in range(self.num_layers):
+                for gate in operator_pool:
+                    name = self._gate_name(gate)
+                    if name == "CZ":
+                        targets = self.cz_edges
+                    else:
+                        targets = self.wires
+
+                    for target in targets:
+                        self.append_gate(name, target)
+                        if optimize_each_gate: self.optimize(X,y)
+
+                if not optimize_each_gate: self.optimize(X,y)
+                current_loss = float(
+                    self.loss(
+                        self.circuit,
+                        self.theta,
+                        X,
+                        y
+                    )
+                )
+                history.append(current_loss)
+                
+                print(
+                    f"Layer {layer + 1}/{self.num_layers} | "
+                    f"Gates: {len(self.gates)} | "
+                    f"Parameters: {len(self.theta)} | "
+                    f"Loss: {current_loss:.6f}"
+                )
+                
+        return self.circuit, self.theta, history
